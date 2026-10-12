@@ -3,33 +3,57 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Road Builder</title>
+<title>Traffic Sandbox</title>
 <style>
-  body { margin: 0; padding: 12px 16px; font: 14px/1.4 system-ui, sans-serif; background: #f4f1ea; color: #222; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 10px 16px 16px; font: 14px/1.4 system-ui, sans-serif; background: #f4f1ea; color: #222; overflow-x: hidden; }
   h1 { font-size: 18px; margin: 0 0 8px; }
   .bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
-  button { font: inherit; padding: 6px 10px; border: 1px solid #999; border-radius: 6px; background: #fff; cursor: pointer; }
+  .group { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  button, select { font: inherit; padding: 5px 9px; border: 1px solid #999; border-radius: 6px; background: #fff; cursor: pointer; }
   button[aria-pressed="true"] { background: #333; color: #fff; border-color: #333; }
-  .stats { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; }
-  canvas { display: block; max-width: 100%; touch-action: none; border-radius: 4px; }
-  p { color: #555; max-width: 640px; }
+  label { display: inline-flex; gap: 6px; align-items: center; }
+  input[type="range"] { width: 140px; max-width: 40vw; }
+  .metrics { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; margin-bottom: 8px; }
+  .metrics b { font-variant-numeric: tabular-nums; }
+  #m-grade { display: inline-block; min-width: 2em; text-align: center; color: #fff; border-radius: 6px; padding: 2px 8px; font-size: 18px; }
+  #board { display: block; width: 100%; height: clamp(320px, 68vh, 900px); touch-action: none; border-radius: 4px; background: #2f3b2a; }
+  p { color: #555; max-width: 720px; margin: 8px 0 0; }
 </style>
 </head>
 <body>
-  <h1>Road Builder</h1>
+  <h1>Traffic Sandbox</h1>
   <div class="bar" id="tools">
-    <button data-tool="road">Road</button>
-    <button data-tool="house">House</button>
-    <button data-tool="shop">Shop</button>
+    <button data-tool="street">Street</button>
+    <button data-tool="avenue">Avenue</button>
+    <button data-tool="oneway">One-way</button>
+    <button data-tool="signal">Signal</button>
+    <button data-tool="home">Home</button>
+    <button data-tool="work">Work</button>
     <button data-tool="bulldoze">Bulldoze</button>
+    <button data-tool="pan">Pan</button>
   </div>
-  <div class="stats">
-    <span>Money: $<b id="money">0</b></span>
-    <span>Delivered: <b id="delivered">0</b></span>
-    <span>Cars: <b id="active">0</b></span>
+  <div class="bar">
+    <label>Examples <select id="examples"><option value="">Empty map</option></select></label>
+    <label>Demand <input id="demand" type="range" min="0" max="100" step="1"> <b id="demand-value">0</b>/min</label>
+    <span class="group" id="speed">
+      <button data-speed="0">Pause</button><button data-speed="1">1x</button><button data-speed="2">2x</button><button data-speed="4">4x</button><button data-speed="8">8x</button>
+    </span>
+    <span class="group">
+      <button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="fit">Fit</button>
+    </span>
+    <label><input id="jam" type="checkbox" checked> Congestion</label>
+  </div>
+  <div class="metrics">
+    <span id="m-grade">-</span>
+    <span>Driving <b id="m-active">0</b></span>
+    <span>Waiting at home <b id="m-waiting">0</b></span>
+    <span>Arrivals <b id="m-rate">0</b>/min</span>
+    <span>Trip time vs free flow <b id="m-delay">1.00x</b></span>
+    <span>Gave up <b id="m-abandoned">0</b></span>
   </div>
   <canvas id="board"></canvas>
-  <p>Place houses and shops, then connect them with roads. Cars drive from houses to reachable shops and earn $15 per delivery. Click or drag to build; bulldozing refunds half.</p>
+  <p>Homes make trips to the nearest Work by travel time. Streets carry one car per direction per tile, avenues two at double speed. An unsignalled crossing lets one car through at a time; a signal lets a whole axis go. Drag the One-way tool along a road to set its direction, click a one-way tile to clear it. Pan with the Pan tool, right or middle drag, two fingers, or arrow keys and WASD. Zoom with the wheel or the buttons.</p>
   <script type="module" src="src/main.js"></script>
 </body>
 </html>

@@ -335,7 +335,8 @@ const GRADES = [
 
 export function metrics(s) {
   const { num, den, arrivedEma, abandoned, waiting } = s.stats;
-  const idle = den === 0 && waiting === 0;
+  // No grade until a trip has finished or trips have waited a combined minute at home.
+  const idle = den === 0 && num < WINDOW;
   const delayRatio = den > 0 ? num / den : waiting > 0 ? Infinity : 1;
   return {
     active: s.cars.length,
