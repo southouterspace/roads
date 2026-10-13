@@ -4,13 +4,14 @@ A 3D road-building town simulator for mobile browsers, running on Cloudflare Wor
 
 **Play:** https://roads.southouterspace.workers.dev
 
-Pave roads to connect homes to shops. Cars drive between them in the right-hand lane, and each finished trip earns money. New buildings appear along your roads. Roads that cross water become bridges.
+Sketch roads to connect homes to shops. Cars drive between them in the right-hand lane, and each finished trip earns money. New buildings appear along your roads. Roads that cross water become bridges.
 
 ## Controls
 
 | Action | Touch | Mouse |
 | --- | --- | --- |
-| Pave or bulldoze | One-finger drag | Left drag |
+| Sketch a road | One-finger drag. It locks to a straight row or column, then tap **Build** (or **✕** to discard) | Left drag, then `Enter` / `Esc` |
+| Bulldoze | One-finger drag | Left drag |
 | Pan | Two-finger drag, or the **Move** tool | Middle drag, or the **Move** tool |
 | Zoom | Pinch | Wheel |
 | Rotate | Two-finger twist | Right drag, or `Q` / `E` |

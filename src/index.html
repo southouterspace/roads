@@ -32,6 +32,14 @@
   #tools button span { font-size: 24px; line-height: 1.1; }
   #tools button.on { background: var(--accent); color: #fff; }
   #tools button:disabled { opacity: .35; }
+  #draftBar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 84px);
+    display: flex; align-items: center; gap: 8px; background: var(--card); padding: 6px 6px 6px 14px; border-radius: 18px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.2); white-space: nowrap; }
+  #draftInfo { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #draftBar button { border: 0; border-radius: 12px; padding: 10px 14px; font-size: 15px; font-weight: 700; }
+  #cancelDraft { background: #eef2f5; }
+  #buildDraft { background: #2fb36a; color: #fff; }
+  #buildDraft:disabled { background: #b9c3cb; }
   #toast { position: fixed; top: calc(max(10px, env(safe-area-inset-top)) + 50px); left: 50%; transform: translateX(-50%);
     background: rgba(31,42,51,.92); color: #fff; padding: 8px 14px; border-radius: 12px; font-size: 14px;
     opacity: 0; transition: opacity .25s; pointer-events: none; text-align: center; max-width: 86vw; }
@@ -60,6 +68,12 @@
 </div>
 <div id="toast"></div>
 
+<div id="draftBar" class="hidden">
+  <span id="draftInfo"></span>
+  <button id="cancelDraft" aria-label="Cancel road">✕</button>
+  <button id="buildDraft">✓ Build</button>
+</div>
+
 <div id="tools">
   <button data-tool="road" class="on"><span>🛣️</span>Road</button>
   <button data-tool="bulldoze"><span>🚜</span>Bulldoze</button>
@@ -84,7 +98,7 @@
     <h2>🛣️ How to play</h2>
     <p>Connect homes 🏠 to shops 🏬 with roads. Every finished car trip earns you money, and the town grows along your roads.</p>
     <ul>
-      <li><b>Road:</b> drag a finger to pave. Crossing water builds a bridge ($40/tile).</li>
+      <li><b>Road:</b> drag a finger to sketch a straight road, then tap <b>Build</b>. Crossing water builds a bridge ($40/tile).</li>
       <li><b>Bulldoze:</b> drag to clear trees, roads or buildings.</li>
       <li><b>Camera:</b> two fingers to pan, pinch to zoom, twist to rotate. Or pick <b>Move</b> to pan with one finger.</li>
       <li>Buildings with a red <b>!</b> have no road next to them.</li>
@@ -549,6 +563,7 @@ function dropCarsUsing(k) {
 function resetSim() {
   for (const c of cars) scene.remove(c.mesh);
   cars = [];
+  clearDraft();
   undoStack.length = 0;
   updateUndo();
 }
@@ -714,6 +729,64 @@ function showCursor(t) {
   cursor.material.color.set(tool === 'bulldoze' ? 0xe5484d : 0x46d17a);
 }
 
+// ---------- road drafts ----------
+// The road tool sketches a straight run along one axis; nothing is paved until Build is tapped.
+let draft = null; // { start: [i, j], axis: null | 'x' | 'z', tiles: [[i, j], ...] }
+const draftGeo = new THREE.BoxGeometry(0.94, 0.08, 0.94).translate(0, 0.04, 0);
+const draftMats = {};
+for (const [kind, color] of [['new', 0xffffff], ['existing', 0x6fa8ff], ['blocked', 0xe5484d]])
+  draftMats[kind] = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false });
+const draftMeshes = [];
+function startDraft(t) {
+  draft = { start: t, axis: null, tiles: [] };
+  updateDraft(t);
+}
+function updateDraft(t) {
+  if (!draft || !t) return;
+  const [si, sj] = draft.start;
+  if (t[0] === si && t[1] === sj) draft.axis = null;
+  else if (!draft.axis) draft.axis = Math.abs(t[0] - si) >= Math.abs(t[1] - sj) ? 'x' : 'z';
+  const end = draft.axis === 'x' ? [t[0], sj] : draft.axis === 'z' ? [si, t[1]] : draft.start;
+  draft.tiles = [draft.start].concat(linePath(draft.start, end));
+  renderDraft();
+}
+function renderDraft() {
+  const tiles = draft ? draft.tiles : [];
+  let cost = 0, fresh = 0, blocked = false;
+  tiles.forEach(([i, j], n) => {
+    const c = grid[idx(i, j)];
+    const kind = isRoad(c) ? 'existing' : isBuilding(c) ? 'blocked' : 'new';
+    if (kind === 'new') { fresh++; cost += c === T.WATER ? PRICE.bridge : c === T.TREE ? PRICE.road + PRICE.clearTree : PRICE.road; }
+    if (kind === 'blocked') blocked = true;
+    if (!draftMeshes[n]) { const m = new THREE.Mesh(draftGeo); m.renderOrder = 5; scene.add(m); draftMeshes.push(m); }
+    const m = draftMeshes[n];
+    m.material = draftMats[kind];
+    m.position.set(wx(i), 0, wx(j));
+    m.visible = true;
+  });
+  for (let n = tiles.length; n < draftMeshes.length; n++) draftMeshes[n].visible = false;
+  show('draftBar', !!draft);
+  if (!draft) return;
+  $('buildDraft').disabled = blocked || fresh === 0 || cost > money;
+  $('draftInfo').textContent = blocked ? 'A building is in the way'
+    : fresh === 0 ? 'Already paved'
+    : cost > money ? 'Need $' + cost.toLocaleString()
+    : fresh + (fresh === 1 ? ' tile' : ' tiles') + ' · $' + cost.toLocaleString();
+}
+function clearDraft() { draft = null; renderDraft(); }
+function buildDraft() {
+  if (!draft || $('buildDraft').disabled) return;
+  const tiles = draft.tiles;
+  draft = null;
+  beginStroke();
+  for (const [i, j] of tiles) if (!applyTool(i, j)) break;
+  endStroke();
+  renderDraft();
+  hud();
+}
+$('buildDraft').addEventListener('click', buildDraft);
+$('cancelDraft').addEventListener('click', clearDraft);
+
 // ---------- camera ----------
 const cam = { tx: 0, tz: 0, yaw: 0.5, pitch: 0.95, dist: 26 };
 function updateCamera() {
@@ -771,9 +844,16 @@ canvas.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' && e.button === 2) gesture = 'orbit';
     else if (e.pointerType === 'mouse' && e.button === 1) gesture = 'pan';
     else if (tool === 'move') gesture = 'pan';
+    else if (tool === 'road') {
+      gesture = 'draft';
+      cursor.visible = false;
+      const t = tileAt(e.clientX, e.clientY);
+      if (t) startDraft(t); else clearDraft();
+    }
     else { gesture = 'paint'; beginStroke(); paintAt(e.clientX, e.clientY); }
   } else if (pointers.size === 2) {
     if (gesture === 'paint') cancelStroke();
+    if (gesture === 'draft') clearDraft();
     gesture = 'multi';
     cursor.visible = false;
     multi = twoFinger();
@@ -787,6 +867,7 @@ canvas.addEventListener('pointermove', e => {
   const px = p.x, py = p.y;
   p.x = e.clientX; p.y = e.clientY;
   if (gesture === 'paint') paintAt(e.clientX, e.clientY);
+  else if (gesture === 'draft') { const t = tileAt(e.clientX, e.clientY); if (draft) updateDraft(t); else if (t) startDraft(t); }
   else if (gesture === 'pan') panBy(px, py, p.x, p.y);
   else if (gesture === 'orbit') { cam.yaw -= (p.x - px) * 0.008; cam.pitch += (p.y - py) * 0.005; updateCamera(); }
   else if (gesture === 'multi' && pointers.size === 2) {
@@ -821,10 +902,13 @@ addEventListener('keydown', e => {
   if (e.key === '1') setTool('road');
   if (e.key === '2') setTool('bulldoze');
   if (e.key === '3') setTool('move');
+  if (e.key === 'Enter') buildDraft();
+  if (e.key === 'Escape') clearDraft();
 });
 
 function setTool(t) {
   tool = t;
+  clearDraft();
   document.querySelectorAll('#tools [data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
   cursor.visible = false;
 }
@@ -848,6 +932,7 @@ function hud(earned) {
   $('money').textContent = Math.floor(money).toLocaleString();
   $('pop').textContent = connectedHouses * 4;
   $('trips').textContent = trips;
+  if (draft) renderDraft();
   if (earned) {
     const el = $('moneyStat');
     el.classList.add('good');
