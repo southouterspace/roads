@@ -11,7 +11,8 @@ const MANIFEST = JSON.stringify({
   icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml' }],
 });
 const MAP_ID = /^\/api\/maps\/([a-z0-9]{10})$/;
-const GRID = /^[.rtwbhs]+$/;
+const CELL = /^[.twdG][.sh0-7][.sh][xgo]$/;
+const TRAFFIC = ['calm', 'steady', 'rush'];
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
@@ -26,16 +27,12 @@ async function createMap(request, env) {
     return json({ error: 'invalid JSON' }, 400);
   }
   const n = Number(data.n);
-  if (!Number.isInteger(n) || n < 8 || n > 64 || typeof data.grid !== 'string' || data.grid.length !== n * n || !GRID.test(data.grid)) {
-    return json({ error: 'invalid map' }, 400);
-  }
-  const map = {
-    v: 1,
-    n,
-    grid: data.grid,
-    money: Math.floor(Math.min(1e9, Math.max(0, Number(data.money) || 0))),
-    trips: Math.floor(Math.min(1e9, Math.max(0, Number(data.trips) || 0))),
-  };
+  const grid = typeof data.grid === 'string' ? data.grid : '';
+  const cellsOk = Number.isInteger(n) && n >= 8 && n <= 64 && grid.length === n * n * 4 && (grid.match(/.{4}/g) || []).every(c => CELL.test(c));
+  const districtsOk = Array.isArray(data.districts) && data.districts.length <= 12 &&
+    data.districts.every(d => Array.isArray(d) && d.length === 5 && d.every(v => Number.isInteger(v) && v >= 0 && v < 64));
+  if (data.v !== 2 || !cellsOk || !districtsOk) return json({ error: 'invalid map' }, 400);
+  const map = { v: 2, n, grid, districts: data.districts, traffic: TRAFFIC.includes(data.traffic) ? data.traffic : 'steady' };
   const id = crypto.randomUUID().replace(/-/g, '').slice(0, 10);
   await env.MAPS.put('map:' + id, JSON.stringify(map), { expirationTtl: 60 * 60 * 24 * 365 });
   return json({ id }, 201);
