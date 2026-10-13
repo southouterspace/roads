@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "roads",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-01",
+  "rules": [{ "type": "Text", "globs": ["**/*.html"], "fallthrough": true }],
+  "kv_namespaces": [{ "binding": "MAPS", "id": "2eb5db6539db40ee9143334ed0fa53dd" }],
+  "observability": { "enabled": true }
+}
