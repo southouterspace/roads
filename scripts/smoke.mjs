@@ -1,81 +1,10 @@
 // Drives the real page with pointer events: a divided highway, a viaduct, a curve and an off-ramp.
 // Usage: node scripts/smoke.mjs  (serves src/ itself; set ROADS_URL to test a running server instead)
-import { createServer } from 'node:http';
-import { readFile, mkdir } from 'node:fs/promises';
-import { extname, join, normalize } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright';
+import { openGame } from './page.mjs';
 
-const root = fileURLToPath(new URL('../src/', import.meta.url));
-const out = fileURLToPath(new URL('./out/', import.meta.url));
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
-
-async function serve() {
-  const server = createServer(async (req, res) => {
-    const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^(\.\.[/\\])+/, '');
-    try {
-      const body = await readFile(join(root, path === '/' ? 'index.html' : path));
-      res.writeHead(200, { 'content-type': TYPES[extname(path)] || (path === '/' ? 'text/html' : 'application/octet-stream') });
-      res.end(body);
-    } catch {
-      res.writeHead(404);
-      res.end();
-    }
-  });
-  await new Promise(r => server.listen(0, '127.0.0.1', r));
-  return { server, url: `http://127.0.0.1:${server.address().port}/` };
-}
-
-await mkdir(out, { recursive: true });
-const local = process.env.ROADS_URL ? null : await serve();
-const url = process.env.ROADS_URL || local.url;
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
-});
-const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-const problems = [];
-page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') problems.push(`${m.type()}: ${m.text()}`); });
-page.on('pageerror', e => problems.push(`pageerror: ${e.stack}`));
-
-await page.goto(url);
-await page.waitForFunction(() => window.__roads && window.__roads.counts().segments > 0);
-await page.click('#closeHelp');
+const { page, look, screen, settle, click, pickRoad, build, shot, close } = await openGame();
 const start = await page.evaluate(() => window.__roads.counts());
-
-const look = (x, z, dist, pitch = 1.0, yaw = 0.5) => page.evaluate(([x, z, dist, pitch, yaw]) => {
-  Object.assign(window.__roads.camera.rig, { x, z, dist, pitch, yaw });
-  window.__roads.camera.update();
-}, [x, z, dist, pitch, yaw]);
-const screen = (x, z, lift = 0) => page.evaluate(([x, z, lift]) => window.__roads.project(x, window.__roads.surfaceAt(x, z) + lift + 0.15, z), [x, z, lift]);
-const settle = () => page.waitForTimeout(250);
-async function click(x, z, lift = 0) {
-  const s = await screen(x, z, lift);
-  await page.mouse.move(s.x, s.y, { steps: 4 });
-  await page.mouse.down();
-  await page.mouse.up();
-  await settle();
-}
-async function drag(x, z, lift = 0) {
-  const s = await screen(x, z, lift);
-  await page.mouse.down();
-  await page.mouse.move(s.x, s.y, { steps: 12 });
-  await page.mouse.up();
-  await settle();
-}
-async function pickRoad(id) {
-  await page.click('[data-tool="road"]');
-  if (await page.locator('#picker').isHidden()) await page.click('[data-tool="road"]');
-  await page.click(`[data-road="${id}"]`);
-}
-const build = async () => {
-  assert.equal(await page.locator('#buildDraft').isDisabled(), false, `draft refused: ${await page.textContent('#draftInfo')}`);
-  await page.click('#buildDraft');
-  await settle();
-  await page.keyboard.press('Escape');
-};
-const shot = name => page.screenshot({ path: join(out, name) });
 
 await look(-60, 560, 950, 1.1, 0.35);
 await pickRoad('div2');
@@ -167,7 +96,5 @@ if (crossing) { await look(crossing.x, crossing.z, 90, 0.7, 0.9); await shot('8-
 await look(-560, 420, 260, 0.75, 0.6);
 await shot('9-town.png');
 
-await browser.close();
-if (local) local.server.close();
-assert.deepEqual(problems, [], problems.join('\n'));
+await close();
 console.log('smoke ok');
