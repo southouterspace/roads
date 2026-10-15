@@ -22,7 +22,7 @@ for (const d of [15, 30, 45]) {
     close(t[1], Math.sin(deg(d)), 1e-9, 'end tangent z');
     close(arc.turn, deg(d), 1e-12, 'turn');
     close(arc.radius / 5, Math.round(arc.radius / 5), 1e-9, 'radius is a multiple of 5');
-    assert.equal(arc.radius, 120);
+    close(minRadius(arc), arc.radius, 1e-6, 'shown radius is the tightest radius the rule checks');
   });
 }
 

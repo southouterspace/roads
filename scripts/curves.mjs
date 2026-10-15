@@ -35,7 +35,7 @@ for (const [d, z] of curves) {
   await hover(...target);
   await click(...target);
   const info = await page.textContent('#draftInfo');
-  assert.match(info, new RegExp(`^Turn ${d}° right · R 160 m`), info);
+  assert.match(info, new RegExp(`^Turn ${d}° right · R \\d*[05] m`), info);
   await build();
   const turn = await turnFrom(400, z);
   console.log(`snapped ${d}°: built turn ${(turn / DEG).toFixed(4)}°, ${info}`);

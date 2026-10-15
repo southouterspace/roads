@@ -24,7 +24,8 @@ function straight(p0, tangent, along, step) {
 function arcOf(p0, tangent, turn, cursor, radiusStep) {
   const v = G.sub(cursor, p0);
   if (Math.abs(turn) < EPS) return straight(p0, tangent, G.dot(v, tangent), radiusStep ? STRAIGHT_STEP : 0);
-  const chordDir = rotate(tangent, turn / 2), half = Math.sin(Math.abs(turn) / 2);
+  // radius is the curve's tightest point (its apex), the value the min-radius rule checks, not the circle through its ends.
+  const chordDir = rotate(tangent, turn / 2), half = Math.tan(Math.abs(turn) / 2);
   let radius = Math.max(G.dot(v, chordDir), 1) / (2 * half);
   if (radiusStep > 0) radius = Math.max(radiusStep, snapTo(radius, radiusStep));
   const chord = 2 * radius * half;
