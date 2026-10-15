@@ -10,7 +10,7 @@ const MIN_GAP = 2.2;
 const LOOKAHEAD = 160;
 const GHOST_AFTER = 60;
 const GHOST_FOR = 6;
-const PHASE_GREEN = 16, PHASE_AMBER = 3, PHASE_CLEAR = 1.5;
+const PHASE_GREEN = 12, PHASE_AMBER = 3, PHASE_CLEAR = 1.5;
 export const MAX_CARS = 320;
 export const TRAFFIC = { calm: 10, steady: 5, rush: 2.2 };
 

@@ -17,15 +17,15 @@ const HELP_KEY = 'roads-help-seen';
 const NODE_PX = 22, SEG_PX = 16;
 
 const ROAD_OPTIONS = [
-  { id: 'street', badge: 'ST', sub: '1 + 1 lanes · 50' },
-  { id: 'avenue', badge: 'AV', sub: '2 + 2 lanes · 60' },
-  { id: 'oneway', badge: '1W', sub: '2 lanes one way · 50' },
-  { id: 'ramp', badge: 'RP', sub: '1 lane · 60' },
-  { id: 'ramp2', badge: 'R2', sub: '2 lanes · 70' },
-  { id: 'hw2', badge: 'H2', sub: '2 lanes one way · 100' },
-  { id: 'hw3', badge: 'H3', sub: '3 lanes one way · 110' },
-  { id: 'div2', badge: 'D2', sub: 'both carriageways · 100' },
-  { id: 'div3', badge: 'D3', sub: 'both carriageways · 110' },
+  { id: 'street', badge: 'ST', sub: '1 + 1 lanes · 50 km/h' },
+  { id: 'avenue', badge: 'AV', sub: '2 + 2 lanes · 60 km/h' },
+  { id: 'oneway', badge: '1W', sub: '2 lanes one way · 50 km/h' },
+  { id: 'ramp', badge: 'RP', sub: '1 lane · 60 km/h' },
+  { id: 'ramp2', badge: 'R2', sub: '2 lanes · 70 km/h' },
+  { id: 'hw2', badge: 'H2', sub: '2 lanes one way · 100 km/h' },
+  { id: 'hw3', badge: 'H3', sub: '3 lanes one way · 110 km/h' },
+  { id: 'div2', badge: 'D2', sub: 'both ways · 100 km/h' },
+  { id: 'div3', badge: 'D3', sub: 'both ways · 110 km/h' },
 ];
 const optionName = id => (pairOf.has(id) ? pairOf.get(id).name : profile(id).name);
 const CONTROL_OPTIONS = [

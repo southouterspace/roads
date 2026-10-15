@@ -142,6 +142,24 @@ export function createRenderer(canvas) {
   const townGroup = new THREE.Group();
   scene.add(townGroup);
   let townTrees = () => false;
+  let buildings = null;
+  function placeBuildings(onRoad) {
+    if (!buildings) return;
+    const { all, inst, roofs } = buildings;
+    all.forEach((b, i) => {
+      const k = onRoad(b) ? 0 : 1;
+      dummy.position.set(b.x, b.base, b.z);
+      dummy.rotation.set(0, b.rot, 0);
+      dummy.scale.set(b.w * k, (b.h + 1) * k, b.d * k);
+      dummy.updateMatrix();
+      inst.setMatrixAt(i, dummy.matrix);
+      dummy.position.y = b.base + b.h + 1;
+      dummy.scale.set(b.w * 0.96 * k, k, b.d * 0.96 * k);
+      dummy.updateMatrix();
+      roofs.setMatrixAt(i, dummy.matrix);
+    });
+    inst.instanceMatrix.needsUpdate = roofs.instanceMatrix.needsUpdate = true;
+  }
   function setTowns(towns) {
     townGroup.clear();
     const all = towns.flatMap(t => t.buildings.map(b => ({ ...b, color: t.color })));
@@ -159,19 +177,12 @@ export function createRenderer(canvas) {
     inst.receiveShadow = true;
     const col = new THREE.Color();
     all.forEach((b, i) => {
-      const base = Math.min(heightAt(b.x - b.w / 2, b.z - b.d / 2), heightAt(b.x + b.w / 2, b.z + b.d / 2), heightAt(b.x, b.z)) - 1;
-      dummy.position.set(b.x, base, b.z);
-      dummy.rotation.set(0, b.rot, 0);
-      dummy.scale.set(b.w, b.h + 1, b.d);
-      dummy.updateMatrix();
-      inst.setMatrixAt(i, dummy.matrix);
-      dummy.position.y = base + b.h + 1;
-      dummy.scale.set(b.w * 0.96, 1, b.d * 0.96);
-      dummy.updateMatrix();
-      roofs.setMatrixAt(i, dummy.matrix);
+      b.base = Math.min(heightAt(b.x - b.w / 2, b.z - b.d / 2), heightAt(b.x + b.w / 2, b.z + b.d / 2), heightAt(b.x, b.z)) - 1;
       col.set(b.color).lerp(new THREE.Color(0xf4f1ea), 0.25 + (i % 5) * 0.08);
       inst.setColorAt(i, col);
     });
+    buildings = { all, inst, roofs };
+    placeBuildings(() => false);
     townGroup.add(inst, roofs);
     for (const t of towns) {
       const tex = canvasTexture(512, 128, (g, w, h) => {
@@ -497,6 +508,9 @@ export function createRenderer(canvas) {
       }
     }
     placeTrees((x, z) => townTrees(x, z) || grid.has(Math.floor(x / cell) * 100003 + Math.floor(z / cell)));
+    const deck = [];
+    for (const seg of net.segments.values()) for (const p of segmentPath(net, seg).pts) if (p.lift < 4) deck.push(p);
+    placeBuildings(b => deck.some(p => Math.abs(p.x - b.x) < b.w / 2 + p.w / 2 && Math.abs(p.z - b.z) < b.d / 2 + p.w / 2));
     rebuildSignals(net);
   }
 

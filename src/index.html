@@ -49,6 +49,7 @@
     display: flex; align-items: center; gap: 6px; background: var(--card); padding: 6px; border-radius: 18px;
     box-shadow: 0 4px 16px rgba(0,0,0,.18); width: max-content; max-width: calc(100vw - 24px); box-sizing: border-box;
     flex-wrap: wrap; justify-content: center; }
+  @media (max-width: 640px) { #draftInfo { flex-basis: 100%; text-align: center; } }
   #draftInfo { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; padding: 0 6px; line-height: 1.35; }
   #draftInfo .why { display: block; color: var(--bad); }
   #draftInfo .what { display: block; color: var(--muted); font-weight: 500; }

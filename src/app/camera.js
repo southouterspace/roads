@@ -90,7 +90,7 @@ export function createCameraRig(camera, canvas) {
       return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, span: Math.hypot(a.x - b.x, a.y - b.y), ang: Math.atan2(b.y - a.y, b.x - a.x) };
     };
     canvas.addEventListener('pointerdown', e => {
-      canvas.setPointerCapture(e.pointerId);
+      try { canvas.setPointerCapture(e.pointerId); } catch {}
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pointers.size === 1) {
         if (e.pointerType === 'mouse' && e.button === 2) gesture = 'orbit';
@@ -161,9 +161,10 @@ export function createCameraRig(camera, canvas) {
     const dx = b.x - a.x, dz = b.z - a.z, span = Math.hypot(dx, dz);
     rig.x = (a.x + b.x) / 2;
     rig.z = (a.z + b.z) / 2;
-    rig.yaw = Math.atan2(dx, dz) + Math.PI / 2;
-    rig.dist = span * (camera.aspect < 1 ? 1.9 : 0.95) + 250;
-    rig.pitch = 0.95;
+    const portrait = camera.aspect < 1;
+    rig.yaw = portrait ? Math.atan2(-dx, -dz) : Math.atan2(dx, dz) + Math.PI / 2;
+    rig.dist = span * (portrait ? 1.25 : 0.95) + 250;
+    rig.pitch = portrait ? 1.1 : 0.95;
     update();
   }
 
