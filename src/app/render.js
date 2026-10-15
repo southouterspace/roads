@@ -43,7 +43,7 @@ function canvasTexture(w, h, draw) {
 
 export function createRenderer(canvas) {
   const coarse = matchMedia('(pointer: coarse)').matches;
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', logarithmicDepthBuffer: false });
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.75 : 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -73,9 +73,8 @@ export function createRenderer(canvas) {
     kerb: new THREE.MeshStandardMaterial({ color: 0xd9d4ca, roughness: 0.8 }),
   };
   const ghostMat = ok => new THREE.MeshBasicMaterial({ color: ok ? 0x37c47a : 0xe5484d, transparent: true, opacity: 0.6, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -16 });
-  const GHOST = { ok: ghostMat(true), bad: ghostMat(false), pick: new THREE.MeshBasicMaterial({ color: 0x3f8fd8, transparent: true, opacity: 0.45, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -16 }), danger: ghostMat(false) };
+  const GHOST = { ok: ghostMat(true), bad: ghostMat(false), pick: new THREE.MeshBasicMaterial({ color: 0x3f8fd8, transparent: true, opacity: 0.45, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -16 }) };
 
-  // Terrain
   const EXT = WORLD + 1600, RES = 300;
   const tg = new THREE.PlaneGeometry(EXT, EXT, RES, RES).rotateX(-Math.PI / 2);
   const tp = tg.attributes.position, colors = new Float32Array(tp.count * 3), c = new THREE.Color();
@@ -109,7 +108,6 @@ export function createRenderer(canvas) {
     })), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }));
   scene.add(border);
 
-  // Trees, hidden where roads are built
   const treeRng = mulberry32(99), trees = [];
   while (trees.length < 2600) {
     const x = (treeRng() - 0.5) * WORLD, z = (treeRng() - 0.5) * WORLD;
@@ -138,7 +136,6 @@ export function createRenderer(canvas) {
     crown.instanceMatrix.needsUpdate = true;
   }
 
-  // Towns
   const townGroup = new THREE.Group();
   scene.add(townGroup);
   let townTrees = () => false;
@@ -205,7 +202,6 @@ export function createRenderer(canvas) {
     townTrees = (x, z) => towns.some(t => Math.abs(x - t.x) < 150 && Math.abs(z - t.z) < 150);
   }
 
-  // Road meshes
   const netGroup = new THREE.Group(), padGroup = new THREE.Group(), ghostGroup = new THREE.Group(), pickGroup = new THREE.Group();
   scene.add(netGroup, padGroup, ghostGroup, pickGroup);
   const segCache = new Map(), padCache = new Map();
@@ -566,7 +562,7 @@ export function createRenderer(canvas) {
   function setPick(net, pick, kind) {
     clearGroup(pickGroup);
     if (!net || !pick) return;
-    const mat = kind === 'danger' ? GHOST.danger : GHOST.pick;
+    const mat = kind === 'danger' ? GHOST.bad : GHOST.pick;
     if (pick.seg !== undefined) {
       const seg = net.segments.get(pick.seg);
       if (seg) pickGroup.add(buildSegment(net, seg, mat).group);
@@ -583,7 +579,6 @@ export function createRenderer(canvas) {
     }
   }
 
-  // Markers for the draft: start, end and control point handles.
   const markerGeo = new THREE.SphereGeometry(1, 16, 12);
   const markerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true, opacity: 0.9 });
   const ctrlMat = new THREE.MeshBasicMaterial({ color: 0xffc23d, depthTest: false, transparent: true, opacity: 0.9 });
@@ -605,7 +600,6 @@ export function createRenderer(canvas) {
     });
   }
 
-  // Cars
   const carParts = [
     new THREE.InstancedMesh(new THREE.BoxGeometry(1.8, 0.75, 4.4).translate(0, 0.65, 0), new THREE.MeshStandardMaterial({ roughness: 0.45 }), MAX_CARS),
     new THREE.InstancedMesh(new THREE.BoxGeometry(1.6, 0.6, 2.3).translate(0, 1.3, -0.25), new THREE.MeshStandardMaterial({ color: 0x2a3640, roughness: 0.3 }), MAX_CARS),

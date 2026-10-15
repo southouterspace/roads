@@ -1,7 +1,7 @@
 import { createRenderer, ROAD_Y } from './render.js';
 import { createCameraRig } from './camera.js';
 import { apply, planBuild, dividedActions, continuationCtrl, LIFT_STEP, MAX_LIFT } from '../net/network.js';
-import { PROFILES, profile, pairOf, dividedOffset } from '../net/profiles.js';
+import { profile, pairOf, dividedOffset } from '../net/profiles.js';
 import { classifyNode, segmentPath, nodeY, segCurve, armsAt, structureAt, laneGraph } from '../net/derive.js';
 import { REASON_TEXT } from '../net/validate.js';
 import { createWorld } from '../net/world.js';
@@ -62,7 +62,6 @@ function toast(msg, ms = 2200) {
 
 const reasonText = error => REASON_TEXT[error.reason] || (error.reason === 'twoWay' ? 'Only one-way roads can be reversed' : 'That does not work here');
 
-// ---------- network changes ----------
 function networkChanged() {
   simSetNetwork(app.sim, app.net);
   view.setNetwork(app.net, app.sim);
@@ -103,14 +102,11 @@ function redo() {
 $('undoBtn').addEventListener('click', undo);
 $('redoBtn').addEventListener('click', redo);
 
-// ---------- picking ----------
-function screenOf(x, y, z) { return view.project(x, y, z); }
-
 function pickNode(cx, cy, px = NODE_PX, except = null) {
   let best = null, bestD = px;
   for (const n of app.net.nodes.values()) {
     if (n.id === except) continue;
-    const s = screenOf(n.x, nodeY(n) + ROAD_Y, n.z);
+    const s = view.project(n.x, nodeY(n) + ROAD_Y, n.z);
     if (s.behind) continue;
     const d = Math.hypot(s.x - cx, s.y - cy);
     if (d < bestD) { best = n; bestD = d; }
@@ -125,7 +121,7 @@ function pickSegment(cx, cy, px = SEG_PX, except = null) {
     const pts = segmentPath(app.net, seg).pts;
     let prev = null;
     for (let i = 0; i < pts.length; i += 2) {
-      const p = pts[i], s = screenOf(p.x, p.y + ROAD_Y, p.z);
+      const p = pts[i], s = view.project(p.x, p.y + ROAD_Y, p.z);
       if (s.behind) { prev = null; continue; }
       if (prev) {
         const dx = s.x - prev.s.x, dy = s.y - prev.s.y, l2 = dx * dx + dy * dy || 1;
@@ -152,7 +148,6 @@ function pickAny(cx, cy) {
   return s ? { seg: s.seg.id } : null;
 }
 
-// ---------- drafting ----------
 const isDivided = () => pairOf.has(app.road);
 const roadProfile = () => (isDivided() ? pairOf.get(app.road).carriageway : app.road);
 const anchorPos = a => {
@@ -387,7 +382,6 @@ $('lowerBtn').addEventListener('click', () => changeLift(-1));
 $('curveBtn').addEventListener('click', () => { app.curve = !app.curve; refreshDraft(); });
 $('snapBtn').addEventListener('click', () => { app.snap = !app.snap; refreshDraft(); });
 
-// ---------- tools ----------
 function setTool(t) {
   if (t === 'road' && app.tool === 'road') { show('picker', $('picker').classList.contains('hidden') && !app.draft); return; }
   app.tool = t;
@@ -503,7 +497,6 @@ $('info').addEventListener('click', e => {
   run({ type: 'setLift', node: node.id, lift: node.lift + Number(b.dataset.lift) * LIFT_STEP });
 });
 
-// ---------- pointer input ----------
 const press = { x: 0, y: 0, moved: false };
 const drawing = () => app.tool === 'road';
 const curving = () => app.curve || app.shift;
@@ -569,7 +562,6 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => { if (e.key === 'Shift') app.shift = false; });
 
-// ---------- HUD and menu ----------
 function hud() {
   $('carCount').textContent = app.sim.cars.length;
   const f = app.sim.flow;
@@ -621,17 +613,16 @@ function frameStart() {
   cam.frame(best.a, best.b);
 }
 
-// ---------- loop ----------
 let last = performance.now(), acc = 0;
 const STEP = 1 / 20;
 function frame(now) {
-  const dt = Math.min(0.1, (now - last) / 1000);
+  const dt = Math.min(0.3, (now - last) / 1000);
   last = now;
   cam.tick(dt);
   acc += dt;
   let n = 0;
-  while (acc >= STEP && n++ < 4) { simTick(app.sim, STEP, app.rng); acc -= STEP; }
-  if (n >= 4) acc = 0;
+  while (acc >= STEP && n++ < 6) { simTick(app.sim, STEP, app.rng); acc -= STEP; }
+  if (n >= 6) acc = 0;
   view.updateCars(app.sim, world.towns);
   view.updateSignals(app.sim);
   view.render(cam.rig, cam.rig.dist);

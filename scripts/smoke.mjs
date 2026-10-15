@@ -141,7 +141,7 @@ const joined = await page.evaluate(() => {
 });
 assert.ok(joined, 'an avenue joins Brookvale and Elmstead across the highway');
 await page.waitForTimeout(20000);
-const traffic = await page.evaluate(() => ({ cars: window.__roads.sim.cars.length, kinds: window.__roads.kinds().filter(k => k === 'intersection').length }));
+const traffic = await page.evaluate(() => ({ simSeconds: Math.round(window.__roads.sim.time), cars: window.__roads.sim.cars.length, kinds: window.__roads.kinds().filter(k => k === 'intersection').length }));
 console.log(JSON.stringify(traffic));
 assert.ok(traffic.cars > 0, 'cars are driving');
 

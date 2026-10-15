@@ -26,7 +26,6 @@ export function mulberry32(seed) {
 
 const graphMemo = new WeakMap();
 
-// Per lane graph: speed limits along each path and the indexes right of way needs.
 function prepare(net) {
   const graph = laneGraph(net);
   let g = graphMemo.get(graph);
@@ -254,7 +253,6 @@ function limAt(state, path, car) {
   return Math.min(lim[car.k], lim[Math.min(car.k + 1, lim.length - 1)] + 1);
 }
 
-// Distance from the car to each upcoming path start along its route.
 function ahead(state, car) {
   const out = [];
   const cur = state.g.paths.get(car.route[car.ri]);

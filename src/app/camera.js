@@ -90,7 +90,7 @@ export function createCameraRig(camera, canvas) {
       return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, span: Math.hypot(a.x - b.x, a.y - b.y), ang: Math.atan2(b.y - a.y, b.x - a.x) };
     };
     canvas.addEventListener('pointerdown', e => {
-      try { canvas.setPointerCapture(e.pointerId); } catch {}
+      canvas.setPointerCapture(e.pointerId);
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pointers.size === 1) {
         if (e.pointerType === 'mouse' && e.button === 2) gesture = 'orbit';

@@ -30,7 +30,6 @@ export function heightAt(ends, s, L, x, z) {
   return Math.max(y, ground);
 }
 
-// Untrimmed centreline samples for a curve with given end heights.
 export function rawCentreline(cv, ends) {
   const samples = G.arcSamples(cv, SAMPLE);
   const L = samples[samples.length - 1].s;
