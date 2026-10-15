@@ -301,11 +301,19 @@ function leaderGap(state, car, cur, upcoming) {
   return { gap, lv, myRemain };
 }
 
-function signalGreen(state, ctl, arm) {
+function signalPhase(state, ctl, arm) {
   const cycle = PHASE_GREEN + PHASE_AMBER + PHASE_CLEAR;
   const t = (state.time + ctl.offset) % (cycle * ctl.count);
   const phase = Math.floor(t / cycle), within = t - phase * cycle;
-  return { go: ctl.phaseOf.get(arm) === phase && within < PHASE_GREEN, phase };
+  if (ctl.phaseOf.get(arm) !== phase) return 'red';
+  return within < PHASE_GREEN ? 'green' : within < PHASE_GREEN + PHASE_AMBER ? 'amber' : 'red';
+}
+
+export const controlKind = (state, nodeId) => state.g.controls.get(nodeId)?.kind ?? 'none';
+
+export function signalColour(state, nodeId, segId) {
+  const ctl = state.g.controls.get(nodeId);
+  return ctl && ctl.kind === 'signal' ? signalPhase(state, ctl, segId) : null;
 }
 
 function approaching(state, conn, window) {
@@ -331,7 +339,7 @@ function mayEnter(state, car, conn, dist) {
       return !rivals.some(c => approaching(state, c, 25));
     }
     case 'signal': {
-      if (!signalGreen(state, ctl, conn.arm).go) return false;
+      if (signalPhase(state, ctl, conn.arm) !== 'green') return false;
       return others.every(c => ctl.phaseOf.get(c.arm) === ctl.phaseOf.get(conn.arm));
     }
     case 'stop': {

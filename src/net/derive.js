@@ -345,17 +345,15 @@ function segmentLanes(net, seg) {
     for (let i = 0; i < n; i++) {
       const startIndex = Math.min(i, nS - 1), endIndex = Math.min(i, nE - 1);
       const o0 = offS[startIndex], o1 = offE[endIndex];
-      const pts = G.offsetPolyline(order, k => {
-        const u = dir > 0 ? order[k].u : 1 - order[k].u;
-        return o0 + (o1 - o0) * G.smoothstep(u);
-      }).map(p => ({ x: p.x, y: p.y, z: p.z }));
+      const offs = order.map(p => o0 + (o1 - o0) * G.smoothstep(dir > 0 ? p.u : 1 - p.u));
+      const pts = G.offsetPolyline(order, k => offs[k]).map(p => ({ x: p.x, y: p.y, z: p.z }));
       const cum = G.cumulative(pts);
       lanes.push({
         id: laneId(seg.id, dir, i), kind: 'lane', seg: seg.id, dir, index: i, startIndex, endIndex,
         from: dir > 0 ? seg.a : seg.b, to: dir > 0 ? seg.b : seg.a,
         joins: i >= nE ? laneId(seg.id, dir, nE - 1) : null,
         splits: i >= nS ? laneId(seg.id, dir, nS - 1) : null,
-        pts, cum, len: cum[cum.length - 1], speed: Math.min(pA.speed, pB.speed),
+        pts, offs, cum, len: cum[cum.length - 1], speed: Math.min(pA.speed, pB.speed),
       });
     }
   }

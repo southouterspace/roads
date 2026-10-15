@@ -159,11 +159,11 @@ function applyBuild(net, action) {
     done = t;
   }
   pieces.push(rest);
-  pieces.forEach((pc, i) => {
+  const segments = pieces.map((pc, i) => {
     const last = i === pieces.length - 1;
-    addSegment(w, chain[i], chain[i + 1], plan.ctrl ? pc.c : null, plan.profileA, last ? plan.profileB : plan.profileA);
+    return addSegment(w, chain[i], chain[i + 1], plan.ctrl ? pc.c : null, plan.profileA, last ? plan.profileB : plan.profileA);
   });
-  return { net: w, built: { nodes: chain } };
+  return { net: w, built: { nodes: chain, segments } };
 }
 
 // Two one-way carriageways offset either side of the drawn line; the left one runs the other way.
@@ -214,7 +214,7 @@ export function apply(net, action) {
       if (r1.error) return { net, error: r1.error };
       const r2 = apply(r1.net, second);
       if (r2.error) return { net, error: r2.error };
-      return { net: r2.net };
+      return { net: r2.net, built: { nodes: [...r1.built.nodes, ...r2.built.nodes], segments: [...r1.built.segments, ...r2.built.segments] } };
     }
     case 'bulldoze': {
       const seg = net.segments.get(action.seg);

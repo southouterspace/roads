@@ -33,8 +33,15 @@ function townStreets(net, town) {
   return { net, gate };
 }
 
-function buildings(town, rng) {
+function buildings(town, gate, rng) {
   const out = [];
+  const clearOfGate = b => {
+    const half = Math.hypot(b.w, b.d) / 2 + 6, k = BLOCK / (BLOCK + GATE);
+    const edge = [town.x + (gate[0] - town.x) * k, town.z + (gate[1] - town.z) * k];
+    const minX = Math.min(edge[0], gate[0]) - half, maxX = Math.max(edge[0], gate[0]) + half;
+    const minZ = Math.min(edge[1], gate[1]) - half, maxZ = Math.max(edge[1], gate[1]) + half;
+    return !(b.x > minX && b.x < maxX && b.z > minZ && b.z < maxZ);
+  };
   for (let bi = 0; bi < 4; bi++) for (let bj = 0; bj < 4; bj++) {
     const cx = town.x + (bi - 1.5) * BLOCK, cz = town.z + (bj - 1.5) * BLOCK;
     const outer = bi === 0 || bi === 3 || bj === 0 || bj === 3;
@@ -43,7 +50,8 @@ function buildings(town, rng) {
       const ox = (k % 2 ? 1 : -1) * 15, oz = (k < 2 ? -1 : 1) * 15;
       const w = 14 + rng() * 10, d = 14 + rng() * 10;
       const h = outer ? 6 + rng() * 6 : 9 + rng() * (bi + bj === 3 ? 34 : 18);
-      out.push({ x: cx + ox * (outer ? 0.8 : 1), z: cz + oz * (outer ? 0.8 : 1), w, d, h, rot: (rng() - 0.5) * 0.1 });
+      const b = { x: cx + ox * (outer ? 0.8 : 1), z: cz + oz * (outer ? 0.8 : 1), w, d, h, rot: (rng() - 0.5) * 0.1 };
+      if (clearOfGate(b)) out.push(b);
     }
   }
   return out;
@@ -55,7 +63,7 @@ export function createWorld(seed = 7) {
   const towns = TOWNS.map(t => {
     const r = townStreets(net, t);
     net = r.net;
-    return { ...t, r: 50, gate: { x: r.gate[0], z: r.gate[1] }, buildings: buildings(t, rng) };
+    return { ...t, r: 50, gate: { x: r.gate[0], z: r.gate[1] }, buildings: buildings(t, r.gate, rng) };
   });
   return { net, towns };
 }

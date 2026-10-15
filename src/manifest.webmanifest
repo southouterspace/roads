@@ -1,0 +1,9 @@
+{
+  "name": "Road Builder",
+  "short_name": "Roads",
+  "start_url": "/",
+  "display": "fullscreen",
+  "background_color": "#9fd6ee",
+  "theme_color": "#9fd6ee",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
