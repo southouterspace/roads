@@ -45,7 +45,7 @@ Each item has a priority. **Core** means the sandbox does not work without it. *
 | --- | --- | --- |
 | Node elevation | Core | Each node stores a lift above the terrain, in 2.5 m steps. Raise or lower it while drawing, or edit a node afterwards. |
 | Grade | Core | The game interpolates height along the segment with a smoothstep curve, so ramps have a gentle start and finish. |
-| Maximum grade | Core | Each profile sets a limit: streets 10 %, highways 6 %, ramps 8 %. A steeper segment cannot be built. |
+| Maximum grade | Core | Each profile sets a limit: streets 10 %, highways 6 %, ramps 8 %. A steeper segment cannot be built. The check uses the steepest point of the smoothstep, which is 1.5 times the average, and skips segments that follow the ground. |
 | At-grade roads follow the terrain | Core | A segment whose ends both have zero lift follows the ground over hills. |
 | Vertical clearance | Core | Two segments that cross in plan view need 5 m between them, or they must meet at a junction. |
 | Banking (superelevation) | Later | Visual only. |
@@ -56,7 +56,7 @@ Each item has a priority. **Core** means the sandbox does not work without it. *
 | --- | --- | --- |
 | At-grade road | Core | Deck sits on the terrain. |
 | Retaining wall or embankment | Core | Lift between 0 and the pillar threshold. The deck gets solid side walls down to the ground. |
-| Viaduct | Core | Lift above the threshold. The deck is a slab with barriers, and pillars are placed at a regular spacing. |
+| Viaduct | Core | Lift above 4 m. The deck is a slab with barriers, and pillars are placed at a regular spacing. |
 | Bridge over water | Core | A viaduct over water. Pillars stand in the water. |
 | Tunnel or cutting | Next | Needs terrain that can be cut, which this version does not have. |
 
@@ -95,7 +95,7 @@ The game classifies each node from the segments that meet there. You do not plac
 | Dead end | Core | One segment. Two-way roads get a turning circle. |
 | Continuation | Core | Two segments in line. |
 | Taper node | Core | Two segments with different profiles. |
-| Diverge (off-ramp gore) | Core | Three one-way segments: one in and two out. The outgoing segment that is closer to straight ahead is the mainline. The rightmost lanes feed the exit. |
+| Diverge (off-ramp gore) | Core | Three one-way segments: one in and two out. The outgoing segment that is closer to straight ahead is the mainline. The lanes on the exit's side feed it: the rightmost for a right exit, the leftmost for a left exit. |
 | Merge (on-ramp gore) | Core | Three one-way segments: two in and one out. The ramp lane joins on the right. If the outgoing road has fewer lanes than come in, the extra lane merges and the ramp yields to the mainline. |
 | Intersection: T, cross or multi-way | Core | Three or more segments where at least one is two-way, or a mix that is not a clean merge or diverge. |
 | Intersection control: yield, all-way stop, signals | Core | Set per node with the Junction tool. |
