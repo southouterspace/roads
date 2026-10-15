@@ -188,6 +188,28 @@ export function dividedActions(net, action) {
   ];
 }
 
+// One build per piece along a route between two existing nodes. Inner nodes take a height interpolated by distance.
+// pieces: [{ from, to, ctrl, profile, profileB }]
+export function chainActions(net, action) {
+  const a = net.nodes.get(action.fromNode), b = net.nodes.get(action.toNode);
+  const lengths = action.pieces.map(p => G.bezierLength(G.curve(p.from, p.ctrl, p.to)));
+  const total = lengths.reduce((x, y) => x + y, 0);
+  const lifts = [a.lift];
+  let s = 0;
+  for (const l of lengths.slice(0, -1)) {
+    s += l;
+    lifts.push(a.lift + (b.lift - a.lift) * (s / total));
+  }
+  lifts.push(b.lift);
+  const last = action.pieces.length - 1;
+  return action.pieces.map((p, i) => ({
+    type: 'build',
+    from: i === 0 ? { kind: 'node', id: a.id } : { kind: 'free', x: p.from[0], z: p.from[1] },
+    to: i === last ? { kind: 'node', id: b.id } : { kind: 'free', x: p.to[0], z: p.to[1] },
+    ctrl: p.ctrl, profile: p.profile, profileB: p.profileB ?? p.profile, liftFrom: lifts[i], liftTo: lifts[i + 1],
+  }));
+}
+
 function revalidate(w, segIds) {
   for (const id of segIds) {
     const seg = w.segments.get(id);
@@ -215,6 +237,20 @@ export function apply(net, action) {
       const r2 = apply(r1.net, second);
       if (r2.error) return { net, error: r2.error };
       return { net: r2.net, built: { nodes: [...r1.built.nodes, ...r2.built.nodes], segments: [...r1.built.segments, ...r2.built.segments] } };
+    }
+    case 'chain': {
+      if (!net.nodes.has(action.fromNode) || !net.nodes.has(action.toNode)) return { net, error: { reason: 'missing' } };
+      let w = net, from = null;
+      const built = { nodes: [], segments: [] };
+      for (const step of chainActions(net, action)) {
+        const r = apply(w, from === null ? step : { ...step, from: { kind: 'node', id: from } });
+        if (r.error) return { net, error: r.error };
+        w = r.net;
+        from = r.built.nodes.at(-1);
+        built.nodes.push(...r.built.nodes);
+        built.segments.push(...r.built.segments);
+      }
+      return { net: w, built };
     }
     case 'bulldoze': {
       const seg = net.segments.get(action.seg);
