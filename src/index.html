@@ -34,6 +34,10 @@
   #tools button .ic { font-size: 22px; line-height: 1.1; }
   #tools button .badge { position: absolute; top: 2px; right: 2px; font-size: 8.5px; font-weight: 800; letter-spacing: .02em;
     background: var(--ink); color: #fff; border-radius: 6px; padding: 1px 4px; }
+  @media (max-width: 440px) {
+    #tools { width: calc(100vw - 16px); box-sizing: border-box; }
+    #tools button { flex: 1 1 0; min-width: 0; font-size: 9px; padding: 6px 0; }
+  }
   #tools button.on { background: var(--accent); color: #fff; }
   #tools button.on .badge { background: #fff; color: var(--accent); }
   .pop { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 76px);
@@ -45,18 +49,22 @@
   #picker button.on, #controls button.on { background: var(--accent); color: #fff; }
   #picker button.on small, #controls button.on small { color: #e6f0fb; }
   #controls { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
-  #draftBar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 76px);
+  .bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 76px);
     display: flex; align-items: center; gap: 6px; background: var(--card); padding: 6px; border-radius: 18px;
     box-shadow: 0 4px 16px rgba(0,0,0,.18); width: max-content; max-width: calc(100vw - 24px); box-sizing: border-box;
     flex-wrap: wrap; justify-content: center; }
-  @media (max-width: 640px) { #draftInfo { flex-basis: 100%; text-align: center; } }
-  #draftInfo { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; padding: 0 6px; line-height: 1.35; }
-  #draftInfo .why { display: block; color: var(--bad); }
-  #draftInfo .what { display: block; color: var(--muted); font-weight: 500; }
-  #draftBar button { border: 0; border-radius: 12px; padding: 9px 12px; font-size: 14px; font-weight: 700; flex: none; background: #eef2f5; }
-  #draftBar button.on { background: var(--ink); color: #fff; }
-  #draftBar #buildDraft { background: var(--ok); color: #fff; }
-  #draftBar #buildDraft:disabled { background: #b9c3cb; }
+  @media (max-width: 640px) { .bar .info { flex-basis: 100%; text-align: center; } }
+  .bar .info { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; padding: 0 6px; line-height: 1.35; }
+  .bar .part { white-space: nowrap; }
+  .bar .why { display: block; color: var(--bad); }
+  .bar .what { display: block; color: var(--muted); font-weight: 500; }
+  .bar button { border: 0; border-radius: 12px; padding: 9px 12px; font-size: 14px; font-weight: 700; flex: none; background: #eef2f5; }
+  .bar button.on { background: var(--ink); color: #fff; }
+  .bar button.go { background: var(--ok); color: #fff; }
+  .bar button.go:disabled { background: #b9c3cb; }
+  .bar .kinds { display: flex; gap: 2px; background: #eef2f5; border-radius: 12px; padding: 2px; }
+  .bar .kinds button { padding: 7px 12px; border-radius: 10px; }
+  .bar .kinds button:not(.on) { background: transparent; }
   #info { position: fixed; top: calc(max(10px, env(safe-area-inset-top)) + 48px); left: max(10px, env(safe-area-inset-left));
     background: var(--card); border-radius: 16px; padding: 10px 12px; box-shadow: 0 4px 16px rgba(0,0,0,.15); font-size: 13px;
     line-height: 1.5; min-width: 180px; max-width: min(300px, calc(100vw - 20px)); box-sizing: border-box; }
@@ -101,18 +109,27 @@
 <div id="picker" class="pop hidden"></div>
 <div id="controls" class="pop hidden"></div>
 
-<div id="draftBar" class="hidden">
-  <span id="draftInfo"></span>
+<div id="draftBar" class="bar hidden">
+  <span id="draftInfo" class="info"></span>
   <button id="lowerBtn" aria-label="Lower end">▼</button>
   <button id="raiseBtn" aria-label="Raise end">▲</button>
   <button id="curveBtn">Curve</button>
   <button id="snapBtn" class="on">Snap</button>
+  <button id="turnBtn">Turn: Free</button>
   <button id="cancelDraft" aria-label="Cancel">✕</button>
-  <button id="buildDraft">✓ Build</button>
+  <button id="buildDraft" class="go">✓ Build</button>
+</div>
+
+<div id="linkBar" class="bar hidden">
+  <span id="linkInfo" class="info"></span>
+  <div class="kinds" id="linkKinds"><button data-kind="corner">Corner</button><button data-kind="smooth">Smooth</button></div>
+  <button id="cancelLink" aria-label="Cancel">✕</button>
+  <button id="buildLink" class="go">✓ Build</button>
 </div>
 
 <div id="tools">
   <button data-tool="road" class="on"><span class="ic">🛣️</span>Road<span class="badge" id="roadBadge">ST</span></button>
+  <button data-tool="connect"><span class="ic">🔗</span>Connect</button>
   <button data-tool="junction"><span class="ic">🚦</span>Junction</button>
   <button data-tool="upgrade"><span class="ic">⬆️</span>Upgrade</button>
   <button data-tool="reverse"><span class="ic">🔁</span>Reverse</button>
@@ -154,7 +171,9 @@
     <ul>
       <li>Red means the road breaks a rule. The bar says which one.</li>
       <li><b>▲ ▼</b> (or <kbd>R</kbd> / <kbd>F</kbd>) raise the end you are placing. Above 5 m the road becomes a viaduct that crosses other roads.</li>
-      <li>Starting from a road end continues its direction. <b>Curve</b> (or hold <kbd>Shift</kbd>) bends the road as you drag.</li>
+      <li>Starting from a road end continues its direction. With <b>Snap</b> on, the curve turns in 15° steps and its radius in 5 m steps, so 15°, 30° and 45° curves are one drag.</li>
+      <li><b>Turn</b> (or <kbd>T</kbd>) locks the turn at 15° to 90°. Moving then changes only the radius. <b>Curve</b> (or hold <kbd>Shift</kbd>) lets you place the bend yourself.</li>
+      <li><b>Connect</b> joins two road ends. Tap both, then pick <b>Smooth</b> for the widest curve or <b>Corner</b> to run both roads on until they meet.</li>
       <li>Two fingers pan, pinch to zoom and twist to rotate. With a mouse, right drag orbits and middle drag pans.</li>
     </ul>
     <div class="row"><button id="closeHelp" class="primary">Start building</button></div>

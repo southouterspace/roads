@@ -13,6 +13,7 @@ Every road is a curve between two nodes, with a height at each end and a road ty
 | Tool | What it does |
 | --- | --- |
 | Road | Draws a road. Tap the tool again to pick the type: Street, Avenue, One-way, Ramp, 2-lane ramp, Highway 2, Highway 3, or a divided highway (2+2 or 3+3), which draws both carriageways at once. |
+| Connect | Tap the end of one road, then the end of another. **Smooth** joins them with the widest curve that fits. **Corner** runs each road straight on to where the two lines meet. One-way roads are joined so traffic flows through. |
 | Junction | Tap an intersection to choose its control: Auto, Yield, All-way stop, Signals or Roundabout. |
 | Upgrade | Tap a road to change it to the type picked in the Road menu. Its shape and connections stay. |
 | Reverse | Tap a one-way road to swap its direction. |
@@ -40,7 +41,11 @@ The ghost is green when the road can be built and red when it breaks a rule. The
 
 **Height.** ▲ and ▼ (or `R` / `F`, `PageUp` / `PageDown`) raise or lower the end you are placing in 2.5 m steps. A raised road gets retaining walls. Above 4 m it becomes a viaduct on pillars, or a bridge over the river.
 
-**Curves.** Hold `Shift`, or turn on **Curve**, and drag to place the bend. **Snap** (`G`) keeps angles to 15° and lengths to 5 m.
+**Curves.** A road that starts on the end of another road, or carries on after **Build**, bends smoothly away from it. The bar shows the turn, its radius and its length, for example `Turn 45° right · R 120 m · 94 m`. With **Snap** on (`G`), the turn snaps to 15° steps and the radius to 5 m steps, so a 15°, 30° or 45° curve takes one drag. A road from open ground snaps its heading to 15° and its length to 5 m.
+
+**Turn lock.** Tap **Turn** (or press `T`) to lock the turn at 15°, 30°, 45°, 60° or 90°. Moving the cursor then changes only the radius, and the side the cursor is on picks left or right. A lock needs a direction to turn from, so draw a straight first when you start on open ground.
+
+**Free bends.** Hold `Shift`, or turn on **Curve**, and drag to place the bend yourself.
 
 **Flow** in the top bar shows how close cars get to free-flowing speed. Set the traffic level (Calm, Steady, Rush hour) in the menu.
 
@@ -50,11 +55,14 @@ The ghost is green when the road can be built and red when it breaks a rule. The
 | --- | --- | --- |
 | Draw a road | Tap the start, drag the end, then **Build** | Click the start, click the end, then `Enter` |
 | Bend a road | **Curve**, then drag | `Shift` + drag |
+| Snap turns and radii | **Snap** | `G` |
+| Lock the turn | **Turn** | `T` |
+| Join two road ends | **Connect**, tap both ends, then **Build** | `2`, click both ends, `C` switches Corner and Smooth, `Enter` |
 | Raise / lower the end | ▲ / ▼ | `R` / `F` |
 | Pan | Two-finger drag, or the **Camera** tool | Middle drag, `WASD` or arrow keys |
 | Zoom | Pinch | Wheel |
 | Rotate and tilt | Two-finger twist | Right drag, or `Q` / `E` |
-| Pick a tool | Toolbar | `1`–`7` |
+| Pick a tool | Toolbar | `1`–`8` |
 | Undo / redo | ↶ / ↷ | `Ctrl+Z` / `Ctrl+Shift+Z` |
 
 ## How it's built
@@ -63,6 +71,7 @@ There is no build step. The page is plain ES modules, and Three.js is loaded fro
 
 - `src/net/` is the game model. These are pure modules with no DOM and no Three.js.
   - `network.js` holds the nodes and segments. It is the only place that changes them, through `apply(net, action)`.
+  - `design.js` is the curve maths: snapped and locked turns, and the corner and smooth routes between two road ends.
   - `validate.js` checks a road before it is built and names the rule it breaks.
   - `derive.js` works out everything else from the network: the 3D path of each segment, the junction kind at each node, the structure under the deck, and the lane graph.
   - `sim.js` runs the traffic over the lane graph: routing, car following, merging and right of way.
@@ -79,8 +88,9 @@ There is no build step. The page is plain ES modules, and Three.js is loaded fro
 
 ```sh
 npm install
-npm test                  # node --test: the model and the traffic sim
+npm test                  # node --test: the model, the curve maths and the traffic sim
 node scripts/smoke.mjs    # drives the page in Chromium; screenshots go to scripts/out/
+node scripts/curves.mjs   # drives snapped and locked turns and Connect in Chromium
 npm run dev               # http://localhost:8787, with local KV
 npm run deploy            # wrangler deploy, using the KV namespace in wrangler.jsonc
 ```

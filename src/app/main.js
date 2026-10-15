@@ -1,6 +1,7 @@
 import { createRenderer, ROAD_Y } from './render.js';
 import { createCameraRig } from './camera.js';
-import { apply, planBuild, dividedActions, continuationCtrl, LIFT_STEP, MAX_LIFT } from '../net/network.js';
+import { apply, planBuild, dividedActions, chainActions, LIFT_STEP, MAX_LIFT } from '../net/network.js';
+import { arcFromCursor, arcWithTurn, connect, endTangent, orientEnds } from '../net/design.js';
 import { profile, pairOf, dividedOffset } from '../net/profiles.js';
 import { classifyNode, segmentPath, nodeY, segCurve, armsAt, structureAt, laneGraph } from '../net/derive.js';
 import { REASON_TEXT } from '../net/validate.js';
@@ -35,6 +36,14 @@ const CONTROL_OPTIONS = [
   { id: 'signal', name: 'Signals', sub: 'in phases' },
   { id: 'roundabout', name: 'Roundabout', sub: 'yield to the ring' },
 ];
+const TURN_LOCKS = [0, 15, 30, 45, 60, 90];
+const SNAP_TURN = Math.PI / 12, SNAP_RADIUS = 5;
+const LINK_TEXT = {
+  parallel: 'These roads run side by side and never meet',
+  behind: 'These roads point away from each other',
+  tooClose: 'The ends are too close together',
+  sameWay: 'Both ends carry traffic the same way',
+};
 const KIND_TEXT = { end: 'Dead end', continue: 'Continuation', taper: 'Taper', diverge: 'Diverge (off-ramp gore)', merge: 'Merge (on-ramp gore)', intersection: 'Intersection' };
 const STRUCTURE_TEXT = { grade: 'at grade', wall: 'on a retaining wall', viaduct: 'viaduct', bridge: 'bridge' };
 
@@ -45,7 +54,7 @@ const cam = createCameraRig(view.camera, canvas);
 const world = createWorld();
 const app = {
   net: world.net, past: [], future: [], tool: 'road', road: 'street', snap: true, curve: false, shift: false,
-  draft: null, cursorLift: 0, picked: null, inspect: null,
+  turnLock: 0, draft: null, link: null, linkKind: 'smooth', cursorLift: 0, picked: null, inspect: null,
   sim: null, rng: mulberry32(2024), traffic: 'steady',
 };
 app.sim = createSim(app.net, world.towns, { traffic: app.traffic });
@@ -200,30 +209,34 @@ function snapAnchor(cx, cy, lift, role) {
   return g ? { anchor: { kind: 'free', x: g.x, z: g.z } } : null;
 }
 
-function startTangent() {
+function startTangent(toward) {
   const d = app.draft;
   if (d.tangent) return d.tangent;
-  if (d.from.kind === 'node') {
-    const arms = armsAt(app.net, d.from.id);
-    return arms.length === 1 ? G.scale(arms[0].away, -1) : null;
-  }
+  if (d.from.kind === 'node') return endTangent(app.net, d.from.id);
   if (d.from.kind === 'segment') {
-    const t = G.bezierTangent(segCurve(app.net, app.net.segments.get(d.from.id)), d.from.t);
-    if (!d.to) return t;
-    const p = anchorPos(d.from), q = anchorPos(d.to);
-    return profile(app.net.segments.get(d.from.id).profileA).oneWay || G.dot(t, G.sub(q, p)) >= 0 ? t : G.scale(t, -1);
+    const seg = app.net.segments.get(d.from.id);
+    const t = G.bezierTangent(segCurve(app.net, seg), d.from.t);
+    return profile(seg.profileA).oneWay || G.dot(t, G.sub(toward, anchorPos(d.from))) >= 0 ? t : G.scale(t, -1);
   }
   return null;
 }
 
-function snapFreeEnd(anchor) {
-  if (!app.snap || anchor.kind !== 'free' || app.draft.ctrl) return anchor;
-  const p0 = anchorPos(app.draft.from), v = [anchor.x - p0[0], anchor.z - p0[1]];
-  const ref = startTangent() || [1, 0];
-  const step = Math.PI / 12;
-  const a = Math.round(G.signedTurn(ref, v) / step) * step, base = Math.atan2(ref[1], ref[0]);
-  const len = Math.max(5, Math.round(G.len(v) / 5) * 5);
-  return { kind: 'free', x: p0[0] + Math.cos(base + a) * len, z: p0[1] + Math.sin(base + a) * len };
+// A free end that continues a road becomes an exact arc. One from a free start snaps to 15° headings and 5 m lengths.
+function placeFreeEnd(cursor) {
+  const d = app.draft, p0 = anchorPos(d.from);
+  const tangent = d.ctrl ? null : startTangent(cursor);
+  const lock = TURN_LOCKS[app.turnLock], radiusStep = app.snap ? SNAP_RADIUS : 0;
+  if (tangent) {
+    const arc = lock
+      ? arcWithTurn(p0, tangent, (lock * Math.PI) / 180, cursor, radiusStep)
+      : arcFromCursor(p0, tangent, cursor, { turnStep: app.snap ? SNAP_TURN : 0, radiusStep });
+    return { to: { kind: 'free', x: arc.to[0], z: arc.to[1] }, arc };
+  }
+  if (!app.snap || d.ctrl) return { to: { kind: 'free', x: cursor[0], z: cursor[1] }, arc: null };
+  const v = G.sub(cursor, p0);
+  const a = Math.round(Math.atan2(v[1], v[0]) / SNAP_TURN) * SNAP_TURN;
+  const len = Math.max(SNAP_RADIUS, Math.round(G.len(v) / SNAP_RADIUS) * SNAP_RADIUS);
+  return { to: { kind: 'free', x: p0[0] + Math.cos(a) * len, z: p0[1] + Math.sin(a) * len }, arc: null };
 }
 
 function setDraftEnd(cx, cy) {
@@ -232,8 +245,16 @@ function setDraftEnd(cx, cy) {
   if (!r) return;
   const p0 = anchorPos(d.from), q = anchorPos(r.anchor);
   if (G.dist(p0, q) < 1) return;
-  d.to = r.anchor.kind === 'free' ? snapFreeEnd(r.anchor) : r.anchor;
-  d.toNodeLift = r.lift;
+  d.cursor = r.anchor.kind === 'free' ? q : null;
+  d.to = r.anchor;
+  d.arc = null;
+  placeEnd();
+}
+
+// Reshapes a free end from the cursor, after the cursor moves or the snap or turn lock changes.
+function placeEnd() {
+  const d = app.draft;
+  if (d && d.cursor) Object.assign(d, placeFreeEnd(d.cursor));
   refreshDraft();
 }
 
@@ -253,10 +274,10 @@ function draftAction() {
   const liftTo = d.to.kind === 'free' ? d.toLift : undefined;
   if (isDivided()) {
     const p0 = anchorPos(d.from), p2 = anchorPos(d.to);
-    const ctrl = d.ctrl || (d.tangent ? continuationCtrl(p0, d.tangent, p2) : null);
+    const ctrl = d.ctrl || (d.arc ? d.arc.ctrl : null);
     return { type: 'divided', pair: app.road, from: { x: p0[0], z: p0[1] }, to: { x: p2[0], z: p2[1] }, ctrl, liftFrom: d.fromLift, liftTo: d.toLift };
   }
-  return { type: 'build', from: d.from, to: d.to, ctrl: d.ctrl || undefined, profile: app.road, liftFrom, liftTo };
+  return { type: 'build', from: d.from, to: d.to, ctrl: d.ctrl || (d.arc ? d.arc.ctrl : undefined), profile: app.road, liftFrom, liftTo };
 }
 
 // A bare network holding only the draft, so a refused draft still shows its real shape in red.
@@ -273,13 +294,39 @@ function bareNetwork(plans) {
   return { net, ids };
 }
 
-function measure(plan) {
+function showGhost(r, plans) {
+  if (!r.error) { view.setGhost(r.net, r.built.segments, true); return; }
+  const bare = bareNetwork(plans);
+  view.setGhost(bare.net, bare.ids, false);
+}
+
+function steepest(plan) {
   const pts = plan.raw.pts;
   let grade = 0;
   if (!(plan.ends.liftA === 0 && plan.ends.liftB === 0)) {
     for (let i = 0; i + 5 < pts.length; i++) grade = Math.max(grade, Math.abs(pts[i + 5].y - pts[i].y) / (pts[i + 5].s - pts[i].s));
   }
-  return { len: plan.raw.L, radius: G.minRadius(plan.cv), grade, liftA: plan.start.lift, liftB: plan.end.lift, terrain: grade === 0 };
+  return grade;
+}
+
+const DEG = 180 / Math.PI;
+// Positive turns bend toward G.right, which is the driver's right.
+const turnText = turn => (Math.abs(turn) * DEG < 0.5 ? 'Straight' : `Turn ${Math.round(Math.abs(turn) * DEG)}° ${turn > 0 ? 'right' : 'left'}`);
+
+// The readout for a route made of plans: turn, radius, length, then grade and the heights at either end.
+function readout(plans, turn, radius, error) {
+  const len = plans.reduce((s, p) => s + p.raw.L, 0);
+  const grade = Math.max(...plans.map(steepest));
+  const liftA = plans[0].start.lift, liftB = plans.at(-1).end.lift;
+  const tightest = Math.min(...plans.map(p => G.minRadius(p.cv)));
+  const need = Math.max(...plans.map(p => Math.max(profile(p.profileA).minRadius, profile(p.profileB).minRadius)));
+  const rule = error && error.reason === 'radius' ? ` (tightest ${Math.round(tightest)} m, needs ${need} m)` : '';
+  const why = error ? `<span class="why">${reasonText(error)}${rule}</span>` : '';
+  const parts = [
+    turnText(turn), radius > 5000 ? null : `R ${Math.round(radius)} m`, `${Math.round(len)} m`,
+    grade === 0 ? 'follows ground' : `${(grade * 100).toFixed(1)} %`, `${liftA.toFixed(1)} → ${liftB.toFixed(1)} m`,
+  ];
+  return parts.filter(Boolean).map(p => `<span class="part">${p}</span>`).join(' · ') + why;
 }
 
 const anchorExists = a => !a || a.kind === 'free' || (a.kind === 'node' ? app.net.nodes.has(a.id) : app.net.segments.has(a.id));
@@ -288,7 +335,9 @@ function refreshDraft() {
   if (app.draft && !(anchorExists(app.draft.from) && anchorExists(app.draft.to))) app.draft = null;
   const d = app.draft;
   show('draftBar', !!d);
-  if (!d) { view.setGhost(null); view.setMarkers([]); return; }
+  $('turnBtn').textContent = `Turn: ${TURN_LOCKS[app.turnLock] ? TURN_LOCKS[app.turnLock] + '°' : 'Free'}`;
+  $('turnBtn').classList.toggle('on', app.turnLock > 0);
+  if (!d) { refreshLink(); return; }
   show('picker', false);
   const markers = [];
   const pointOf = a => { const p = anchorPos(a); return { x: p[0], z: p[1] }; };
@@ -305,28 +354,79 @@ function refreshDraft() {
     return;
   }
   const r = apply(app.net, action);
-  const plans = action.type === 'divided' ? dividedActions(app.net, action).map(a => planBuild(app.net, a)) : [planBuild(app.net, action)];
-  const plan = plans[0].plan;
-  if (r.error) {
-    const bare = bareNetwork(plans.map(p => p.plan));
-    view.setGhost(bare.net, bare.ids, false);
-  } else {
-    view.setGhost(r.net, r.built.segments, true);
-  }
+  const plans = (action.type === 'divided' ? dividedActions(app.net, action) : [action]).map(a => planBuild(app.net, a).plan);
+  const plan = plans[0];
+  showGhost(r, plans);
   const endPt = { x: plan.end.pos[0], z: plan.end.pos[1] };
   markers[1] = { ...endPt, y: plan.end.y };
   if (d.ctrl) markers[2] = { x: d.ctrl[0], z: d.ctrl[1], y: (plan.ends.yA + plan.ends.yB) / 2 };
   view.setMarkers(markers);
-  const m = measure(plan);
-  const radius = m.radius > 5000 ? 'straight' : `R ${Math.round(m.radius)} m`;
-  const grade = m.terrain ? 'follows ground' : `${(m.grade * 100).toFixed(1)} %`;
-  const why = r.error ? `<span class="why">${reasonText(r.error)}</span>` : '';
-  $('draftInfo').innerHTML = `${Math.round(m.len)} m · ${radius} · ${grade} · ${m.liftA.toFixed(1)} → ${m.liftB.toFixed(1)} m${why}`;
+  const arc = d.ctrl ? null : d.arc;
+  const turn = arc ? arc.turn : G.signedTurn(G.bezierTangent(plan.cv, 0), G.bezierTangent(plan.cv, 1));
+  $('draftInfo').innerHTML = readout([plan], turn, arc ? arc.radius : G.minRadius(plan.cv), r.error);
   $('buildDraft').disabled = !!r.error;
 }
 
+const nodePos = id => { const n = app.net.nodes.get(id); return [n.x, n.z]; };
+const isEnd = id => endTangent(app.net, id) !== null;
+
+// The chain action joining the two picked ends, or the reason there is none.
+function linkPlan() {
+  const ends = orientEnds(app.net, app.link.a, app.link.b);
+  if (ends.reason) return { reason: ends.reason };
+  const tA = endTangent(app.net, ends.from), tB = endTangent(app.net, ends.to);
+  const conn = connect(app.linkKind, nodePos(ends.from), tA, nodePos(ends.to), tB);
+  const pA = armsAt(app.net, ends.from)[0].profile.id, pB = armsAt(app.net, ends.to)[0].profile.id;
+  let pieces;
+  switch (conn.kind) {
+    case 'none': return { reason: conn.reason };
+    case 'corner': pieces = conn.pieces.map((p, i) => ({ ...p, profile: i === 0 ? pA : pB, profileB: pB })); break;
+    case 'smooth': pieces = conn.pieces.map((p, i, all) => ({ ...p, profile: pA, profileB: i === all.length - 1 ? pB : pA })); break;
+  }
+  return { action: { type: 'chain', pieces, fromNode: ends.from, toNode: ends.to }, turn: G.signedTurn(tA, G.scale(tB, -1)) };
+}
+
+function refreshLink() {
+  const l = app.link;
+  if (l && !(isEnd(l.a) && (l.b === null || isEnd(l.b)))) app.link = null;
+  show('linkBar', !!app.link);
+  if (!app.link) { view.setGhost(null); view.setMarkers([]); return; }
+  document.querySelectorAll('#linkKinds button').forEach(b => b.classList.toggle('on', b.dataset.kind === app.linkKind));
+  const marker = id => { const n = app.net.nodes.get(id); return { x: n.x, z: n.z, y: nodeY(n) }; };
+  view.setMarkers([l.a, l.b].filter(id => id !== null).map(marker));
+  $('buildLink').disabled = true;
+  if (l.b === null) {
+    view.setGhost(null);
+    $('linkInfo').innerHTML = `<span class="what">Tap a second road end</span>`;
+    return;
+  }
+  const plan = linkPlan();
+  if (plan.reason) {
+    view.setGhost(null);
+    $('linkInfo').innerHTML = `<span class="why">${LINK_TEXT[plan.reason]}</span>`;
+    return;
+  }
+  const r = apply(app.net, plan.action);
+  const plans = chainActions(app.net, plan.action).map(a => planBuild(app.net, a).plan);
+  showGhost(r, plans);
+  $('linkInfo').innerHTML = readout(plans, plan.turn, Math.min(...plans.map(p => G.minRadius(p.cv))), r.error);
+  $('buildLink').disabled = !!r.error;
+}
+
+function buildLink() {
+  if (!app.link || app.link.b === null) return;
+  const plan = linkPlan();
+  if (plan.action && run(plan.action)) { app.link = null; refreshDraft(); }
+}
+
+function setLinkKind(kind) {
+  app.linkKind = kind;
+  refreshDraft();
+}
+
+
 function startDraft(cx, cy) {
-  app.draft = { from: null, fromLift: app.cursorLift, to: null, toLift: app.cursorLift, ctrl: null, fixed: false, dragging: null, tangent: null };
+  app.draft = { from: null, fromLift: app.cursorLift, to: null, toLift: app.cursorLift, ctrl: null, fixed: false, dragging: null, tangent: null, cursor: null, arc: null };
   const r = snapAnchor(cx, cy, app.cursorLift, 'start');
   if (!r || (r.anchor.kind === 'free' && !inWorld(r.anchor.x, r.anchor.z))) { app.draft = null; return false; }
   app.draft.from = r.anchor;
@@ -344,6 +444,7 @@ function startDraft(cx, cy) {
 
 function cancelDraft() {
   app.draft = null;
+  app.link = null;
   refreshDraft();
 }
 
@@ -355,10 +456,10 @@ function buildDraft() {
   if (!run(action)) { app.draft = draft; refreshDraft(); return; }
   if (action.type === 'build') {
     const end = [...app.net.nodes.values()].find(n => Math.hypot(n.x - endPos[0], n.z - endPos[1]) < 0.5);
-    if (end && classifyNode(app.net, end).kind === 'end') app.draft = { from: { kind: 'node', id: end.id }, fromLift: end.lift, to: null, toLift: end.lift, ctrl: null, fixed: false, dragging: null, tangent: null };
+    if (end && classifyNode(app.net, end).kind === 'end') app.draft = { from: { kind: 'node', id: end.id }, fromLift: end.lift, to: null, toLift: end.lift, ctrl: null, fixed: false, dragging: null, tangent: null, cursor: null, arc: null };
   } else {
     const pair = carriagewayPair(endPos[0], endPos[1]);
-    if (pair) app.draft = { from: { kind: 'free', x: pair.mid[0], z: pair.mid[1] }, fromLift: lift, to: null, toLift: lift, ctrl: null, fixed: false, dragging: null, tangent: pair.tangent };
+    if (pair) app.draft = { from: { kind: 'free', x: pair.mid[0], z: pair.mid[1] }, fromLift: lift, to: null, toLift: lift, ctrl: null, fixed: false, dragging: null, tangent: pair.tangent, cursor: null, arc: null };
   }
   refreshDraft();
 }
@@ -380,7 +481,12 @@ $('cancelDraft').addEventListener('click', cancelDraft);
 $('raiseBtn').addEventListener('click', () => changeLift(1));
 $('lowerBtn').addEventListener('click', () => changeLift(-1));
 $('curveBtn').addEventListener('click', () => { app.curve = !app.curve; refreshDraft(); });
-$('snapBtn').addEventListener('click', () => { app.snap = !app.snap; refreshDraft(); });
+$('snapBtn').addEventListener('click', () => { app.snap = !app.snap; placeEnd(); });
+const cycleTurn = () => { app.turnLock = (app.turnLock + 1) % TURN_LOCKS.length; placeEnd(); };
+$('turnBtn').addEventListener('click', cycleTurn);
+$('buildLink').addEventListener('click', buildLink);
+$('cancelLink').addEventListener('click', cancelDraft);
+$('linkKinds').addEventListener('click', e => { const b = e.target.closest('[data-kind]'); if (b) setLinkKind(b.dataset.kind); });
 
 function setTool(t) {
   if (t === 'road' && app.tool === 'road') { show('picker', $('picker').classList.contains('hidden') && !app.draft); return; }
@@ -428,6 +534,15 @@ $('controls').addEventListener('click', e => {
 
 function tapTool(cx, cy) {
   switch (app.tool) {
+    case 'connect': {
+      const n = pickNode(cx, cy, 30);
+      if (!n || !isEnd(n.id)) { toast('Tap the end of a road'); return; }
+      const l = app.link;
+      if (l && l.b === null && l.a !== n.id) l.b = n.id;
+      else app.link = { a: n.id, b: null };
+      refreshDraft();
+      return;
+    }
     case 'junction': {
       const n = pickNode(cx, cy, 30);
       if (!n) { show('controls', false); return; }
@@ -539,7 +654,8 @@ cam.attach({
       return;
     }
     if (app.tool === 'camera' || app.tool === 'inspect' && app.inspect) return;
-    const pick = app.tool === 'junction' ? (n => (n ? { node: n.id } : null))(pickNode(e.clientX, e.clientY, 30)) : (s => (s ? { seg: s.seg.id } : null))(pickSegment(e.clientX, e.clientY));
+    const nodeTool = app.tool === 'junction' || app.tool === 'connect';
+    const pick = nodeTool ? (n => (n ? { node: n.id } : null))(pickNode(e.clientX, e.clientY, 30)) : (s => (s ? { seg: s.seg.id } : null))(pickSegment(e.clientX, e.clientY));
     const key = pick ? JSON.stringify(pick) : '';
     if (key === app.picked) return;
     app.picked = key;
@@ -547,18 +663,20 @@ cam.attach({
   },
 });
 
-const TOOL_KEYS = { 1: 'road', 2: 'junction', 3: 'upgrade', 4: 'reverse', 5: 'bulldoze', 6: 'inspect', 7: 'camera' };
+const TOOL_KEYS = { 1: 'road', 2: 'connect', 3: 'junction', 4: 'upgrade', 5: 'reverse', 6: 'bulldoze', 7: 'inspect', 8: 'camera' };
 addEventListener('keydown', e => {
   if (e.key === 'Shift') app.shift = true;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (TOOL_KEYS[e.key]) setTool(TOOL_KEYS[e.key]);
-  if (e.key === 'Enter') buildDraft();
+  if (e.key === 'Enter') { if (app.link) buildLink(); else buildDraft(); }
   if (e.key === 'Escape') { cancelDraft(); show('picker', false); show('controls', false); }
   if (e.key === 'r' || e.key === 'PageUp') { e.preventDefault(); changeLift(1); }
   if (e.key === 'f' || e.key === 'PageDown') { e.preventDefault(); changeLift(-1); }
-  if (e.key === 'g') { app.snap = !app.snap; toast(app.snap ? 'Snap on: 15° and 5 m' : 'Snap off'); refreshDraft(); }
+  if (e.key === 'g') { app.snap = !app.snap; toast(app.snap ? 'Snap on: 15° turns and 5 m radii' : 'Snap off'); placeEnd(); }
+  if (e.key === 't') { cycleTurn(); toast(`Turn: ${TURN_LOCKS[app.turnLock] ? TURN_LOCKS[app.turnLock] + '°' : 'Free'}`); }
+  if (e.key === 'c' && app.tool === 'connect') setLinkKind(app.linkKind === 'smooth' ? 'corner' : 'smooth');
 });
 addEventListener('keyup', e => { if (e.key === 'Shift') app.shift = false; });
 
