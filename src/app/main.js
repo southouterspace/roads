@@ -1,6 +1,7 @@
 import { createRenderer, ROAD_Y } from './render.js';
 import { createCameraRig } from './camera.js';
 import { apply, planBuild, dividedActions, chainActions, LIFT_STEP, MAX_LIFT } from '../net/network.js';
+import { bridgeRoute } from '../net/bridge.js';
 import { arcFromCursor, arcWithTurn, connect, endTangent, orientEnds } from '../net/design.js';
 import { profile, pairOf, dividedOffset } from '../net/profiles.js';
 import { classifyNode, segmentPath, nodeY, segCurve, armsAt, structureAt, laneGraph } from '../net/derive.js';
@@ -43,6 +44,7 @@ const LINK_TEXT = {
   behind: 'These roads point away from each other',
   tooClose: 'The ends are too close together',
   sameWay: 'Both ends carry traffic the same way',
+  shore: 'Too close to the water to ramp up to a bridge. Pick ends further from the bank',
 };
 const KIND_TEXT = { end: 'Dead end', continue: 'Continuation', taper: 'Taper', diverge: 'Diverge (off-ramp gore)', merge: 'Merge (on-ramp gore)', intersection: 'Intersection' };
 const STRUCTURE_TEXT = { grade: 'at grade', wall: 'on a retaining wall', viaduct: 'viaduct', bridge: 'bridge' };
@@ -383,7 +385,11 @@ function linkPlan() {
     case 'corner': pieces = conn.pieces.map((p, i) => ({ ...p, profile: i === 0 ? pA : pB, profileB: pB })); break;
     case 'smooth': pieces = conn.pieces.map((p, i, all) => ({ ...p, profile: pA, profileB: i === all.length - 1 ? pB : pA })); break;
   }
-  return { action: { type: 'chain', pieces, fromNode: ends.from, toNode: ends.to }, turn: G.signedTurn(tA, G.scale(tB, -1)) };
+  const maxGrade = Math.min(...pieces.flatMap(p => [profile(p.profile).maxGrade, profile(p.profileB).maxGrade]));
+  const heights = bridgeRoute(pieces, { liftA: app.net.nodes.get(ends.from).lift, liftB: app.net.nodes.get(ends.to).lift, maxGrade });
+  if (heights.reason) return { reason: heights.reason };
+  const action = { type: 'chain', pieces: heights.pieces, lifts: heights.lifts ?? undefined, fromNode: ends.from, toNode: ends.to };
+  return { action, turn: G.signedTurn(tA, G.scale(tB, -1)) };
 }
 
 function refreshLink() {

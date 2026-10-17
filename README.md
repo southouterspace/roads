@@ -13,7 +13,7 @@ Every road is a curve between two nodes, with a height at each end and a road ty
 | Tool | What it does |
 | --- | --- |
 | Road | Draws a road. Tap the tool again to pick the type: Street, Avenue, One-way, Ramp, 2-lane ramp, Highway 2, Highway 3, or a divided highway (2+2 or 3+3), which draws both carriageways at once. |
-| Connect | Tap the end of one road, then the end of another. **Smooth** joins them with the widest curve that fits. **Corner** runs each road straight on to where the two lines meet. One-way roads are joined so traffic flows through. |
+| Connect | Tap the end of one road, then the end of another. **Smooth** joins them with the widest curve that fits. **Corner** runs each road straight on to where the two lines meet. One-way roads are joined so traffic flows through. Where the route crosses water it becomes a bridge 5 m above the river, with ramps on each bank inside the road's grade limit. |
 | Junction | Tap an intersection to choose its control: Auto, Yield, All-way stop, Signals or Roundabout. |
 | Upgrade | Tap a road to change it to the type picked in the Road menu. Its shape and connections stay. |
 | Reverse | Tap a one-way road to swap its direction. |
@@ -91,6 +91,7 @@ npm install
 npm test                  # node --test: the model, the curve maths and the traffic sim
 node scripts/smoke.mjs    # drives the page in Chromium; screenshots go to scripts/out/
 node scripts/curves.mjs   # drives snapped and locked turns and Connect in Chromium
+node scripts/bridge.mjs   # connects two ends across the river and checks the bridge
 npm run dev               # http://localhost:8787, with local KV
 npm run deploy            # wrangler deploy, using the KV namespace in wrangler.jsonc
 ```

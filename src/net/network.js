@@ -194,13 +194,16 @@ export function chainActions(net, action) {
   const a = net.nodes.get(action.fromNode), b = net.nodes.get(action.toNode);
   const lengths = action.pieces.map(p => G.bezierLength(G.curve(p.from, p.ctrl, p.to)));
   const total = lengths.reduce((x, y) => x + y, 0);
-  const lifts = [a.lift];
-  let s = 0;
-  for (const l of lengths.slice(0, -1)) {
-    s += l;
-    lifts.push(a.lift + (b.lift - a.lift) * (s / total));
+  let lifts = action.lifts;
+  if (!lifts) {
+    lifts = [a.lift];
+    let s = 0;
+    for (const l of lengths.slice(0, -1)) {
+      s += l;
+      lifts.push(a.lift + (b.lift - a.lift) * (s / total));
+    }
+    lifts.push(b.lift);
   }
-  lifts.push(b.lift);
   const last = action.pieces.length - 1;
   return action.pieces.map((p, i) => ({
     type: 'build',
